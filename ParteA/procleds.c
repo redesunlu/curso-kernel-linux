@@ -55,8 +55,28 @@ static ssize_t procleds_write(struct file *filp, const char __user *buf, size_t 
 
   led_mask[len] = '\0'; /* Add the `\0' */  
   *off+=len;            /* Update the file pointer */
+
+  unsigned int new_mask = 0x0;
+  int i;
+  for (i = 0; i < len - 1; i++) {
+    switch (led_mask[i]){
+      case '1': 
+        new_mask |= (1 << 1);
+        break;
+      case '2':
+        new_mask |= (1 << 2);
+        break;
+      case '3':
+        new_mask |= (1);
+        break;
+    }
+  }
+  printk(KERN_INFO "Procleds: NEW MASK = %x\n", new_mask);
   
-  return len;
+  if (set_leds(kbd_driver, new_mask))
+     return -EPERM;
+  else 
+     return len;
 }
 
 static ssize_t procleds_read(struct file *filp, char __user *buf, size_t len, loff_t *off)
@@ -68,8 +88,6 @@ static const struct file_operations proc_entry_fops = {
     .read = procleds_read,
     .write = procleds_write,    
 };
-
-
 
 int init_procleds_module( void )
 {
@@ -87,7 +105,6 @@ int init_procleds_module( void )
       printk(KERN_INFO "Procleds: Can't create /proc entry\n");
     } else {
       kbd_driver= get_kbd_driver_handler();
-      set_leds(kbd_driver,ALL_LEDS_ON); 
       printk(KERN_INFO "Procleds: Module loaded\n");
     }
   }
@@ -99,7 +116,6 @@ void exit_procleds_module( void )
 {
   remove_proc_entry("leds", NULL);
   vfree(led_mask);
-  set_leds(kbd_driver,ALL_LEDS_OFF);
   printk(KERN_INFO "Procleds: Module unloaded.\n");
 }
 
