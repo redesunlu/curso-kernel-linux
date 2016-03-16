@@ -3,17 +3,15 @@
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
-//#include <asm-generic/uaccess.h>
-
 #include <asm-generic/errno.h>
 #include <linux/init.h>
 #include <linux/tty.h>      /* For fg_console */
 #include <linux/kd.h>       /* For KDSETLED */
 #include <linux/vt_kern.h>
 
-#define ALL_LEDS_ON   0x7
-#define ALL_LEDS_OFF  0
-#define BUFFER_LENGTH PAGE_SIZE
+#define NUM_LOCK_SHIFT    1
+#define CAPS_LOCK_SHIFT   2
+#define BUFFER_LENGTH     PAGE_SIZE
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("ProcFS Keyboard LEDs Kernel Module");
@@ -34,7 +32,7 @@ struct tty_driver* get_kbd_driver_handler(void)
 /* Set led state to that specified by mask */
 static inline int set_leds(struct tty_driver* handler, unsigned int mask)
 {
-    return (handler->ops->ioctl) (vc_cons[fg_console].d->port.tty, KDSETLED,mask);
+    return (handler->ops->ioctl) (vc_cons[fg_console].d->port.tty,KDSETLED,mask);
 }
 
 static ssize_t procleds_write(struct file *filp, const char __user *buf, size_t len, loff_t *off)
@@ -56,23 +54,22 @@ static ssize_t procleds_write(struct file *filp, const char __user *buf, size_t 
   led_mask[len] = '\0'; /* Add the `\0' */  
   *off+=len;            /* Update the file pointer */
 
-  unsigned int new_mask = 0x0;
+  unsigned int new_mask = 0;
   int i;
-  for (i = 0; i < len - 1; i++) {
+  for (i=0;i<len-1;i++) {
     switch (led_mask[i]){
-      case '1': 
-        new_mask |= (1 << 1);
+      case '1':
+        new_mask|=(1<<NUM_LOCK_SHIFT);
         break;
       case '2':
-        new_mask |= (1 << 2);
+        new_mask|=(1<<CAPS_LOCK_SHIFT);
         break;
       case '3':
-        new_mask |= (1);
+        new_mask|=1;
         break;
     }
   }
-  printk(KERN_INFO "Procleds: NEW MASK = %x\n", new_mask);
-  
+  printk(KERN_INFO "Procleds: NEW MASK = %d\n", new_mask);
   if (set_leds(kbd_driver, new_mask))
      return -EPERM;
   else 
@@ -92,13 +89,13 @@ static const struct file_operations proc_entry_fops = {
 int init_procleds_module( void )
 {
   int ret = 0;
-  led_mask = (char *)vmalloc( BUFFER_LENGTH );
+  led_mask = (char *)vmalloc(BUFFER_LENGTH);
 
   if (!led_mask) {
     ret = -ENOMEM;
   } else {
-    memset( led_mask, 0, BUFFER_LENGTH );
-    proc_entry = proc_create( "leds", 0666, NULL, &proc_entry_fops);
+    memset(led_mask, 0, BUFFER_LENGTH);
+    proc_entry = proc_create("leds", 0666, NULL, &proc_entry_fops);
     if (proc_entry == NULL) {
       ret = -ENOMEM;
       vfree(led_mask);
@@ -119,7 +116,5 @@ void exit_procleds_module( void )
   printk(KERN_INFO "Procleds: Module unloaded.\n");
 }
 
-
 module_init( init_procleds_module );
 module_exit( exit_procleds_module );
-
