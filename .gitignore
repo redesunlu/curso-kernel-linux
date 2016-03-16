@@ -3,4 +3,4 @@
 *.order
 *.symvers
 *.mod.c
-*/.*
+*/*/.*
