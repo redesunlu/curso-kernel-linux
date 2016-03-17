@@ -3,7 +3,6 @@
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
-#include <linux/stdio.h>
 #include <linux/list.h>
 //#include <asm-generic/uaccess.h>
 
@@ -27,6 +26,19 @@ typedef struct {
 
 static struct proc_dir_entry *proc_entry;
 
+void list_print(char* buf)
+{
+  char* dst=buf;
+  list_node_t* cur_entry=NULL;
+  struct list_head *cur_node;
+  
+  list_for_each(cur_node, &linked_list)
+  {
+    cur_entry=list_entry(cur_node, list_node_t, links);
+    dst+=sprintf(dst, "%i\n", cur_entry->data);
+  }
+}
+
 static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t len, loff_t *off)
 {
   char kbuf[MAX_SIZE_KBUF];
@@ -41,37 +53,40 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
   }
 
   /* Transfer data from user to kernel space */
-  if (copy_from_user( &kbuf[0], buf, len ))
+  if (copy_from_user(&kbuf[0], buf, len ))
     return -EFAULT;
 
   kbuf[len] = '\0'; /* Add the `\0' */
   *off+=len;        /* Update the file pointer */
-
+  
   if (sscanf(kbuf, "add %i", &val) == 1) {
-    printk(KERN_INFO "Modlist: ADD %i\n", val);
-    list_node_t* new_node;
-    new_node = vmalloc(sizeof(list_node_t));
-
-    if (new_node == NULL) {
-      return -ENOMEM;
-    }
-
-    new_node->data = val;
-    INIT_LIST_HEAD(&new_node->links);
-    list_add_tail(&new_node->links, &linked_list);
-  } else if (sscanf(kbuf, "remove %i", &val) == 1) {
     list_node_t *node;
-    list_for_each_entry(node, &linked_list, links) {
-      if (val == node-> data) {
-        printk(KERN_INFO "Modlist: DEL %i\n", node->data);
-        list_del(&node->links);
+    printk(KERN_INFO "Modlist: ADD %i\n", val);
+    node = vmalloc(sizeof(list_node_t));
+    if (node==NULL)
+      return -ENOMEM;
+    node->data = val;
+    INIT_LIST_HEAD(&node->links);
+    list_add_tail(&node->links, &linked_list);
+  } else if (sscanf(kbuf, "remove %i", &val) == 1) {
+    list_node_t* cur_entry=NULL;
+    struct list_head *cur_node, *aux;
+    list_for_each_safe(cur_node, aux, &linked_list) {
+      cur_entry=list_entry(cur_node, list_node_t, links);
+      if (val == cur_entry->data) {
+        printk(KERN_INFO "Modlist: DEL %i\n", cur_entry->data);
+        list_del(cur_entry);
+        vfree(cur_entry);
       }
     }
   } else if (sscanf(kbuf, "cleanup") == 1) {
-    list_node_t *node;
-    printk(KERN_INFO "Modlist: CLEAN\n");
-    list_for_each_entry(node, &linked_list, links) {
-      list_del(&node->links);
+    list_node_t* cur_entry=NULL;
+    struct list_head *cur_node, *aux;
+    list_for_each_safe(cur_node, aux, &linked_list) {
+      cur_entry=list_entry(cur_node, list_node_t, links);
+      printk(KERN_INFO "Modlist: CLEANUP %i\n", cur_entry->data);
+      list_del(cur_entry);
+      vfree(cur_entry);
     }
   }
 
@@ -85,23 +100,19 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
 
   if ((*off) > 0) /* Tell the application that there is nothing left to read */
       return 0;
-
+  // TODO: Check kbuf's size inside list_print() function
+  list_print(kbuf);
   nr_bytes=strlen(kbuf);
 
   if (len<nr_bytes)
     return -ENOSPC;
 
-    /* Transfer data from the kernel to userspace */
-  if (copy_to_user(kbuf, buf, nr_bytes))
+  /* Transfer data from the kernel to userspace */
+  if (copy_to_user(buf, kbuf, nr_bytes))
     return -EINVAL;
 
+  // TODO: No deberia ser nr_bytes?
   (*off)+=len;  /* Update the file pointer */
-
-  list_node_t *node;
-  list_for_each_entry(node, &linked_list, links) {
-    /* Muestra en dmesg, pero debería mostrar por stdout */
-    sprintf(KERN_INFO "Modlist: %i\n", node->data);
-  }
 
   return nr_bytes;
 }
@@ -123,7 +134,6 @@ int init_modlist_module( void )
     INIT_LIST_HEAD(&linked_list);
     printk(KERN_INFO "Modlist: Module loaded\n");
   }
-
   return ret;
 }
 
