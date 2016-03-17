@@ -31,7 +31,7 @@ void list_print(char* buf)
   char* dst=buf;
   list_node_t* cur_entry=NULL;
   struct list_head *cur_node;
-  
+
   list_for_each(cur_node, &linked_list)
   {
     cur_entry=list_entry(cur_node, list_node_t, links);
@@ -58,7 +58,7 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
 
   kbuf[len] = '\0'; /* Add the `\0' */
   *off+=len;        /* Update the file pointer */
-  
+
   if (sscanf(kbuf, "add %i", &val) == 1) {
     list_node_t *node;
     printk(KERN_INFO "Modlist: ADD %i\n", val);
@@ -75,17 +75,17 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
       cur_entry=list_entry(cur_node, list_node_t, links);
       if (val == cur_entry->data) {
         printk(KERN_INFO "Modlist: DEL %i\n", cur_entry->data);
-        list_del(cur_entry);
+        list_del(&cur_entry->links);
         vfree(cur_entry);
       }
     }
-  } else if (sscanf(kbuf, "cleanup") == 1) {
+  } else if (sscanf(kbuf, "%s", "cleanup") == 1) {
     list_node_t* cur_entry=NULL;
     struct list_head *cur_node, *aux;
     list_for_each_safe(cur_node, aux, &linked_list) {
       cur_entry=list_entry(cur_node, list_node_t, links);
       printk(KERN_INFO "Modlist: CLEANUP %i\n", cur_entry->data);
-      list_del(cur_entry);
+      list_del(&cur_entry->links);
       vfree(cur_entry);
     }
   }
