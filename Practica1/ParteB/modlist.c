@@ -3,6 +3,7 @@
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
+#include <linux/stdio.h>
 #include <linux/list.h>
 //#include <asm-generic/uaccess.h>
 
@@ -44,7 +45,7 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
     return -EFAULT;
 
   kbuf[len] = '\0'; /* Add the `\0' */
-  *off+=len;            /* Update the file pointer */
+  *off+=len;        /* Update the file pointer */
 
   if (sscanf(kbuf, "add %i", &val) == 1) {
     printk(KERN_INFO "Modlist: ADD %i\n", val);
@@ -57,18 +58,21 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
 
     new_node->data = val;
     INIT_LIST_HEAD(&new_node->links);
-
     list_add_tail(&new_node->links, &linked_list);
-
+  } else if (sscanf(kbuf, "remove %i", &val) == 1) {
     list_node_t *node;
     list_for_each_entry(node, &linked_list, links) {
-      printk(KERN_INFO "Modlist: %i\n", node->data);
+      if (val == node-> data) {
+        printk(KERN_INFO "Modlist: DEL %i\n", node->data);
+        list_del(&node->links);
+      }
     }
-
-  } else if (sscanf(kbuf, "remove %i", &val) == 1) {
-    //list_del();
   } else if (sscanf(kbuf, "cleanup") == 1) {
-
+    list_node_t *node;
+    printk(KERN_INFO "Modlist: CLEAN\n");
+    list_for_each_entry(node, &linked_list, links) {
+      list_del(&node->links);
+    }
   }
 
   return len;
@@ -76,7 +80,30 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
 
 static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, loff_t *off)
 {
-  return 0;
+  int nr_bytes;
+  char kbuf[MAX_SIZE_KBUF];
+
+  if ((*off) > 0) /* Tell the application that there is nothing left to read */
+      return 0;
+
+  nr_bytes=strlen(kbuf);
+
+  if (len<nr_bytes)
+    return -ENOSPC;
+
+    /* Transfer data from the kernel to userspace */
+  if (copy_to_user(kbuf, buf, nr_bytes))
+    return -EINVAL;
+
+  (*off)+=len;  /* Update the file pointer */
+
+  list_node_t *node;
+  list_for_each_entry(node, &linked_list, links) {
+    /* Muestra en dmesg, pero debería mostrar por stdout */
+    sprintf(KERN_INFO "Modlist: %i\n", node->data);
+  }
+
+  return nr_bytes;
 }
 
 static const struct file_operations proc_entry_fops = {
