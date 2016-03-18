@@ -4,8 +4,6 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/list.h>
-//#include <asm-generic/uaccess.h>
-
 #include <asm-generic/errno.h>
 #include <linux/init.h>
 #include <linux/vt_kern.h>
@@ -39,6 +37,20 @@ void list_print(char* buf)
   }
 }
 
+// data_value==NULL deletes all the nodes 
+void list_delete(int *data_value)
+{
+  list_node_t* cur_entry=NULL;
+  struct list_head *cur_node, *aux;
+  list_for_each_safe(cur_node, aux, &linked_list) {
+    cur_entry=list_entry(cur_node, list_node_t, links);
+    if ((data_value==NULL)||(cur_entry->data==*data_value)){
+      list_del(&cur_entry->links);
+      vfree(cur_entry);
+    }
+  }
+}
+
 static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t len, loff_t *off)
 {
   char kbuf[MAX_SIZE_KBUF];
@@ -69,27 +81,12 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
     INIT_LIST_HEAD(&node->links);
     list_add_tail(&node->links, &linked_list);
   } else if (sscanf(kbuf, "remove %i", &val) == 1) {
-    list_node_t* cur_entry=NULL;
-    struct list_head *cur_node, *aux;
-    list_for_each_safe(cur_node, aux, &linked_list) {
-      cur_entry=list_entry(cur_node, list_node_t, links);
-      if (val == cur_entry->data) {
-        printk(KERN_INFO "Modlist: DEL %i\n", cur_entry->data);
-        list_del(&cur_entry->links);
-        vfree(cur_entry);
-      }
-    }
-  } else if (sscanf(kbuf, "%s", "cleanup") == 1) {
-    list_node_t* cur_entry=NULL;
-    struct list_head *cur_node, *aux;
-    list_for_each_safe(cur_node, aux, &linked_list) {
-      cur_entry=list_entry(cur_node, list_node_t, links);
-      printk(KERN_INFO "Modlist: CLEANUP %i\n", cur_entry->data);
-      list_del(&cur_entry->links);
-      vfree(cur_entry);
-    }
+      printk(KERN_INFO "Modlist: REMOVE\n");
+      list_delete(&val);
+  } else if (strcmp(kbuf, "cleanup\n") == 0) {
+      printk(KERN_INFO "Modlist: CLEANUP\n");
+      list_delete(NULL);
   }
-
   return len;
 }
 
@@ -100,7 +97,7 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
 
   if ((*off) > 0) /* Tell the application that there is nothing left to read */
       return 0;
-  // TODO: Check kbuf's size inside list_print() function
+  // TODO: Check kbuf's size inside list_print() function, possible overflow!
   list_print(kbuf);
   nr_bytes=strlen(kbuf);
 
@@ -111,7 +108,6 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
   if (copy_to_user(buf, kbuf, nr_bytes))
     return -EINVAL;
 
-  // TODO: No deberia ser nr_bytes?
   (*off)+=len;  /* Update the file pointer */
 
   return nr_bytes;
